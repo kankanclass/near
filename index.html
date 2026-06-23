@@ -1,0 +1,1504 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>가까운 것끼리 모여라 — K-means 군집학습</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --c-bg: #f5f4f0;
+    --c-surface: #ffffff;
+    --c-border: #e0ddd5;
+    --c-text: #1a1917;
+    --c-muted: #7a7870;
+    --c-accent: #3d5a9e;
+    --c-accent-light: #e8ecf7;
+    --c-cluster1: #e85d3b;
+    --c-cluster2: #2e9e6e;
+    --c-cluster3: #e8a020;
+    --c-cluster4: #8b4fc8;
+    --c-cluster5: #2a7bbf;
+    --c-cluster6: #c74f8a;
+    --c-cluster7: #4a9e3f;
+    --c-cluster8: #c4821a;
+    --c-cluster9: #6b5ea8;
+    --c-card-bg: #ffffff;
+    --c-card-border: #d0cdc5;
+    --c-shadow: rgba(0,0,0,0.08);
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --c-bg: #1a1917;
+      --c-surface: #24231f;
+      --c-border: #3a3835;
+      --c-text: #f0ede8;
+      --c-muted: #9a9890;
+      --c-accent: #6b85c8;
+      --c-accent-light: #1e2540;
+      --c-card-bg: #2e2d29;
+      --c-card-border: #4a4845;
+      --c-shadow: rgba(0,0,0,0.3);
+    }
+  }
+
+  body {
+    font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+    background: var(--c-bg);
+    color: var(--c-text);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--c-surface);
+    border-bottom: 1px solid var(--c-border);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    flex-wrap: wrap;
+  }
+
+  .header-title {
+    flex: 1;
+    min-width: 180px;
+  }
+
+  .header-title h1 {
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+  }
+
+  .header-title p {
+    font-size: 12px;
+    color: var(--c-muted);
+    margin-top: 1px;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  button {
+    cursor: pointer;
+    font-family: inherit;
+    border: none;
+    outline: none;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    transition: transform 0.1s, opacity 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  button:active { transform: scale(0.96); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-primary {
+    background: var(--c-accent);
+    color: #fff;
+    padding: 8px 14px;
+  }
+
+  .btn-secondary {
+    background: var(--c-surface);
+    color: var(--c-text);
+    padding: 8px 14px;
+    border: 1px solid var(--c-border);
+  }
+
+  .btn-danger {
+    background: #e85d3b;
+    color: #fff;
+    padding: 8px 14px;
+  }
+
+  .btn-small {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  /* ── Round status bar ── */
+  .status-bar {
+    background: var(--c-accent-light);
+    border-bottom: 1px solid var(--c-border);
+    padding: 8px 20px;
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    flex-wrap: wrap;
+    font-size: 13px;
+  }
+
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .status-label {
+    color: var(--c-muted);
+    font-size: 12px;
+  }
+
+  .status-value {
+    font-weight: 700;
+    color: var(--c-accent);
+  }
+
+  /* ── Main layout ── */
+  main {
+    padding: 16px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  /* ── Phase panels ── */
+  .phase-panel {
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius);
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+
+  .phase-header {
+    padding: 12px 16px;
+    background: var(--c-surface);
+    border-bottom: 1px solid var(--c-border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .phase-badge {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--c-accent);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .phase-title {
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .phase-desc {
+    font-size: 12px;
+    color: var(--c-muted);
+    margin-left: auto;
+  }
+
+  .phase-body {
+    padding: 14px 16px;
+  }
+
+  /* ── Cards pool ── */
+  .cards-pool {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    min-height: 60px;
+    padding: 10px;
+    background: var(--c-bg);
+    border-radius: var(--radius-sm);
+    border: 1px dashed var(--c-border);
+    transition: background 0.2s;
+  }
+
+  .cards-pool.drag-over {
+    background: var(--c-accent-light);
+    border-color: var(--c-accent);
+  }
+
+  /* ── Number Card ── */
+  .num-card {
+    width: 44px;
+    height: 56px;
+    background: var(--c-card-bg);
+    border: 1.5px solid var(--c-card-border);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 700;
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+    transition: transform 0.15s, box-shadow 0.15s, border-color 0.2s;
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .num-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px var(--c-shadow);
+  }
+
+  .num-card.dragging {
+    opacity: 0.4;
+    cursor: grabbing;
+  }
+
+  .num-card.selected {
+    outline: 3px solid var(--c-accent);
+    outline-offset: 2px;
+    transform: translateY(-3px);
+    box-shadow: 0 6px 16px var(--c-shadow);
+  }
+
+  .num-card.placed {
+    border-width: 2px;
+  }
+
+  /* Pastel colors per number 1~9 */
+  .card-n1 { background: #ffd6d6; border-color: #f5a0a0; color: #8b2020; }
+  .card-n2 { background: #ffeacc; border-color: #f5c07a; color: #7a4500; }
+  .card-n3 { background: #fffacc; border-color: #e8d86e; color: #6b5a00; }
+  .card-n4 { background: #d6f5d6; border-color: #88d488; color: #1a5c1a; }
+  .card-n5 { background: #ccf0f5; border-color: #70ccd6; color: #0a5560; }
+  .card-n6 { background: #ccddff; border-color: #80a8f5; color: #1a3580; }
+  .card-n7 { background: #e0ccff; border-color: #aa80f5; color: #3a0f80; }
+  .card-n8 { background: #ffd6f0; border-color: #f580cc; color: #7a0055; }
+  .card-n9 { background: #d6f0e8; border-color: #70c8a8; color: #0a4f35; }
+
+  @media (prefers-color-scheme: dark) {
+    .card-n1 { background: #4a1515; border-color: #8b3030; color: #ffaaaa; }
+    .card-n2 { background: #3d2800; border-color: #8b5c00; color: #ffd08a; }
+    .card-n3 { background: #3d3800; border-color: #8a7a00; color: #fff0a0; }
+    .card-n4 { background: #0f3a0f; border-color: #3a7a3a; color: #a0f0a0; }
+    .card-n5 { background: #0a2f35; border-color: #207a85; color: #90e0ea; }
+    .card-n6 { background: #0f1f50; border-color: #2a50b0; color: #9ab8ff; }
+    .card-n7 { background: #200b50; border-color: #5530a0; color: #c8aaff; }
+    .card-n8 { background: #450030; border-color: #902070; color: #ffaadd; }
+    .card-n9 { background: #0a3020; border-color: #207060; color: #90ddc0; }
+  }
+
+  /* ── Dice area ── */
+  .dice-container {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .dice-face {
+    width: 64px;
+    height: 64px;
+    background: var(--c-surface);
+    border: 2px solid var(--c-border);
+    border-radius: 12px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    padding: 8px;
+    gap: 3px;
+    flex-shrink: 0;
+    transition: transform 0.1s;
+  }
+
+  .dice-face.rolling {
+    animation: diceRoll 0.6s ease-out;
+  }
+
+  @keyframes diceRoll {
+    0% { transform: rotate(0deg) scale(1); }
+    20% { transform: rotate(15deg) scale(1.08); }
+    40% { transform: rotate(-12deg) scale(1.05); }
+    60% { transform: rotate(8deg) scale(1.03); }
+    80% { transform: rotate(-4deg) scale(1.01); }
+    100% { transform: rotate(0deg) scale(1); }
+  }
+
+  .dot {
+    background: var(--c-text);
+    border-radius: 50%;
+    width: 100%;
+    height: 100%;
+    visibility: hidden;
+  }
+
+  .dot.on { visibility: visible; }
+
+  .dice-info {
+    flex: 1;
+    min-width: 160px;
+  }
+
+  .dice-result {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--c-accent);
+    line-height: 1;
+  }
+
+  .dice-result-label {
+    font-size: 12px;
+    color: var(--c-muted);
+    margin-top: 2px;
+  }
+
+  /* ── Clusters grid ── */
+  .clusters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+  }
+
+  .cluster-zone {
+    background: var(--c-bg);
+    border: 2px solid var(--c-border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition: border-color 0.2s, background 0.2s;
+    min-height: 120px;
+  }
+
+  .cluster-zone.drag-over {
+    border-color: var(--c-accent);
+    background: var(--c-accent-light);
+  }
+
+  .cluster-header {
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .cluster-center-badge {
+    font-size: 11px;
+    background: rgba(255,255,255,0.25);
+    border-radius: 20px;
+    padding: 2px 8px;
+  }
+
+  .cluster-cards {
+    padding: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    min-height: 60px;
+  }
+
+  .cluster-zone.drag-over .cluster-cards {
+    background: transparent;
+  }
+
+  /* cluster color per index */
+  .c1 .cluster-header { background: var(--c-cluster1); }
+  .c2 .cluster-header { background: var(--c-cluster2); }
+  .c3 .cluster-header { background: var(--c-cluster3); }
+  .c4 .cluster-header { background: var(--c-cluster4); }
+  .c5 .cluster-header { background: var(--c-cluster5); }
+  .c6 .cluster-header { background: var(--c-cluster6); }
+  .c7 .cluster-header { background: var(--c-cluster7); }
+  .c8 .cluster-header { background: var(--c-cluster8); }
+  .c9 .cluster-header { background: var(--c-cluster9); }
+
+  .c1 { border-color: var(--c-cluster1); }
+  .c2 { border-color: var(--c-cluster2); }
+  .c3 { border-color: var(--c-cluster3); }
+  .c4 { border-color: var(--c-cluster4); }
+  .c5 { border-color: var(--c-cluster5); }
+  .c6 { border-color: var(--c-cluster6); }
+  .c7 { border-color: var(--c-cluster7); }
+  .c8 { border-color: var(--c-cluster8); }
+  .c9 { border-color: var(--c-cluster9); }
+
+  /* ── History table ── */
+  .history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .history-table th {
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--c-muted);
+    border-bottom: 1px solid var(--c-border);
+    white-space: nowrap;
+  }
+
+  .history-table td {
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--c-border);
+    vertical-align: top;
+  }
+
+  .history-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .centers-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .center-chip {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  /* ── Ghost drag element ── */
+  #drag-ghost {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.85;
+    transform: translate(-50%, -50%) scale(1.1);
+    display: none;
+  }
+
+  /* ── Modals ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .modal {
+    background: var(--c-surface);
+    border-radius: var(--radius);
+    padding: 24px;
+    max-width: 420px;
+    width: 100%;
+    border: 1px solid var(--c-border);
+    text-align: center;
+  }
+
+  .modal h2 {
+    font-size: 22px;
+    font-weight: 800;
+    margin-bottom: 8px;
+  }
+
+  .modal p {
+    color: var(--c-muted);
+    font-size: 14px;
+    margin-bottom: 20px;
+    line-height: 1.6;
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  /* ── Empty / placeholder states ── */
+  .empty-hint {
+    font-size: 12px;
+    color: var(--c-muted);
+    padding: 12px;
+    text-align: center;
+    width: 100%;
+  }
+
+  /* ── Convergence banner ── */
+  .convergence-banner {
+    background: #e8f5e9;
+    border: 1.5px solid #4caf50;
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #2e7d32;
+    display: none;
+    gap: 8px;
+    align-items: center;
+    margin-top: 10px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .convergence-banner {
+      background: #1b3a1c;
+      color: #81c784;
+      border-color: #4caf50;
+    }
+  }
+
+  .convergence-banner.visible { display: flex; }
+
+  /* ── Tooltip for avg ── */
+  .cluster-footer {
+    padding: 4px 12px 8px;
+    font-size: 11px;
+    color: var(--c-muted);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 600px) {
+    header { padding: 10px 12px; }
+    main { padding: 10px; }
+    .clusters-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+    .num-card { width: 38px; height: 48px; font-size: 17px; }
+    .dice-face { width: 52px; height: 52px; }
+    .dice-result { font-size: 22px; }
+    .phase-body { padding: 10px; }
+  }
+
+  @media (max-width: 400px) {
+    .clusters-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+  }
+/* ── Footer ── */
+footer {
+  text-align: center;
+  padding: 20px;
+  font-size: 13px;
+  color: var(--c-muted);
+  border-top: 1px solid var(--c-border);
+  margin-top: 20px;
+}
+/* ── Visitor Counter ── */
+.visitor-counter {
+  display: flex;
+  flex-direction: row;     
+  align-items: center;      
+  gap: 4px;              
+  font-size: 13px;
+  color: var(--c-muted);
+  white-space: nowrap;
+  margin-left: auto;        
+}
+
+.visitor-counter span {
+  font-weight: 700;
+  color: var(--c-accent);
+  font-size: 13px;
+}
+
+</style>
+</head>
+<body>
+<!-- Drag ghost element -->
+<div id="drag-ghost"></div>
+
+<!-- Header -->
+<header>
+  <div class="header-title">
+    <h1>🎲 가까운 것끼리 모여라</h1>
+    <p>K-means 군집학습 교구 | 인공지능기초</p>
+  </div>
+<div class="visitor-counter">
+  오늘 <span id="visitor-today">—</span>명 &nbsp;|&nbsp; 총 <span id="visitor-total">—</span>명
+</div>
+  <div class="header-actions">
+    <button class="btn-secondary btn-small" id="btn-show-history">📋 기록 보기</button>
+    <button class="btn-danger btn-small" id="btn-reset">↺ 처음부터</button>
+  </div>
+</header>
+
+<!-- Status bar -->
+<div class="status-bar">
+  <div class="status-item">
+    <span class="status-label">회차</span>
+    <span class="status-value" id="stat-round">0</span>
+  </div>
+  <div class="status-item">
+    <span class="status-label">군집 수</span>
+    <span class="status-value" id="stat-k">—</span>
+  </div>
+  <div class="status-item">
+    <span class="status-label">배치된 카드</span>
+    <span class="status-value" id="stat-placed">0 / 30</span>
+  </div>
+  <div class="status-item">
+    <span class="status-label">단계</span>
+    <span class="status-value" id="stat-phase">시작 전</span>
+  </div>
+</div>
+
+<!-- Main -->
+<main>
+
+  <!-- Phase 1: Dice -->
+  <div class="phase-panel" id="panel-dice">
+    <div class="phase-header">
+      <div class="phase-badge">1</div>
+      <div class="phase-title">주사위 굴리기</div>
+      <div class="phase-desc">나온 숫자 = 군집 수 K (1~6)</div>
+    </div>
+    <div class="phase-body">
+      <div class="dice-container">
+        <div class="dice-face" id="dice-face">
+          <div class="dot" id="d1"></div>
+          <div class="dot" id="d2"></div>
+          <div class="dot" id="d3"></div>
+          <div class="dot" id="d4"></div>
+          <div class="dot" id="d5"></div>
+          <div class="dot" id="d6"></div>
+          <div class="dot" id="d7"></div>
+          <div class="dot" id="d8"></div>
+          <div class="dot" id="d9"></div>
+        </div>
+        <div class="dice-info">
+          <div class="dice-result" id="dice-result">?</div>
+          <div class="dice-result-label" id="dice-result-label">버튼을 눌러 주사위를 굴리세요</div>
+        </div>
+        <button class="btn-primary" id="btn-dice">🎲 주사위 굴리기</button>
+      </div>
+      <div class="convergence-banner" id="convergence-banner">
+        ✅ 기준점이 더 이상 변하지 않습니다. 군집화가 완료되었습니다!
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 2: Card pool -->
+  <div class="phase-panel" id="panel-cards">
+    <div class="phase-header">
+      <div class="phase-badge">2</div>
+      <div class="phase-title">숫자 카드 30장</div>
+      <div class="phase-desc">클릭으로 여러 장 선택 후 군집 영역에 드래그</div>
+    </div>
+    <div class="phase-body">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+        <span id="select-hint" style="font-size:12px;color:var(--c-muted);">카드를 클릭해 선택하고, 선택한 카드를 드래그해 군집으로 이동하세요.</span>
+        <button class="btn-secondary btn-small" id="btn-select-all" style="display:none">전체 선택</button>
+        <button class="btn-secondary btn-small" id="btn-deselect" style="display:none">선택 해제</button>
+      </div>
+      <div class="cards-pool" id="cards-pool">
+        <p class="empty-hint">먼저 주사위를 굴려 군집을 만드세요.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 3: Cluster zones -->
+  <div class="phase-panel" id="panel-clusters" style="display:none">
+    <div class="phase-header">
+      <div class="phase-badge">3</div>
+      <div class="phase-title">카드 배치</div>
+      <div class="phase-desc">선택한 카드를 가장 가까운 기준점 영역으로 드래그</div>
+    </div>
+    <div class="phase-body">
+      <div class="clusters-grid" id="clusters-grid"></div>
+      <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
+        <button class="btn-secondary" id="btn-auto-hint">💡 정답 보기</button>
+        <button class="btn-primary" id="btn-next-round" disabled>다음 회차 →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div class="phase-panel" id="panel-history" style="display:none">
+    <div class="phase-header">
+      <div class="phase-badge" style="background:var(--c-muted)">📋</div>
+      <div class="phase-title">회차별 기록</div>
+    </div>
+    <div class="phase-body">
+      <div style="overflow-x:auto;">
+        <table class="history-table" id="history-table">
+          <thead>
+            <tr>
+              <th>회차</th>
+              <th>K</th>
+              <th>기준점</th>
+              <th>업데이트된 기준점</th>
+              <th>변화</th>
+            </tr>
+          </thead>
+          <tbody id="history-body">
+            <tr><td colspan="5" class="empty-hint">아직 기록이 없습니다.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- Game over modal -->
+<div class="modal-overlay" id="modal-gameover" style="display:none">
+  <div class="modal">
+    <h2>🎉 군집화 완료!</h2>
+    <p id="modal-gameover-msg">더 이상 기준점이 변하지 않아 K-means 알고리즘이 수렴했습니다.<br>총 <strong id="modal-rounds"></strong>회 만에 완료되었습니다.</p>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="modal-view-history">기록 보기</button>
+      <button class="btn-primary" id="modal-restart">새 게임 시작</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ────────────────────────────────────────
+// State
+// ────────────────────────────────────────
+let cards = [];          // array of numbers (sorted)
+let centers = [];        // current cluster centers (floats)
+let k = 0;               // number of clusters
+let round = 0;           // current round number
+let history = [];        // [{round, centers, placements, newCenters}]
+let clusterAssignments = {}; // cardIndex -> clusterIndex
+let gameStarted = false;
+let gameOver = false;
+
+const CLUSTER_COLORS = [
+  '#e85d3b','#2e9e6e','#e8a020','#8b4fc8','#2a7bbf',
+  '#c74f8a','#4a9e3f','#c4821a','#6b5ea8'
+];
+
+// ────────────────────────────────────────
+// DOM refs
+// ────────────────────────────────────────
+const cardsPool = document.getElementById('cards-pool');
+const clustersGrid = document.getElementById('clusters-grid');
+const diceResult = document.getElementById('dice-result');
+const diceResultLabel = document.getElementById('dice-result-label');
+const diceFace = document.getElementById('dice-face');
+const statRound = document.getElementById('stat-round');
+const statK = document.getElementById('stat-k');
+const statPlaced = document.getElementById('stat-placed');
+const statPhase = document.getElementById('stat-phase');
+const historyBody = document.getElementById('history-body');
+const convergenceBanner = document.getElementById('convergence-banner');
+
+// Dot pattern for dice faces [1..6] — standard dice only
+// positions: tl tc tr ml mc mr bl bc br
+const DICE_PATTERNS = {
+  1: [0,0,0, 0,1,0, 0,0,0],
+  2: [1,0,0, 0,0,0, 0,0,1],
+  3: [1,0,0, 0,1,0, 0,0,1],
+  4: [1,0,1, 0,0,0, 1,0,1],
+  5: [1,0,1, 0,1,0, 1,0,1],
+  6: [1,0,1, 1,0,1, 1,0,1],
+};
+
+// ────────────────────────────────────────
+// Init: generate 30 cards
+// ────────────────────────────────────────
+function generateCards() {
+  cards = [];
+  for (let i = 0; i < 30; i++) cards.push(Math.floor(Math.random() * 9) + 1);
+  cards.sort((a, b) => a - b);
+}
+
+function renderCardPool(resetAssignments = true) {
+  if (resetAssignments) clusterAssignments = {};
+  cardsPool.innerHTML = '';
+
+  cards.forEach((num, idx) => {
+    if (clusterAssignments[idx] !== undefined) return; // card is placed elsewhere
+    const card = createCardEl(num, idx);
+    cardsPool.appendChild(card);
+  });
+
+  if (cardsPool.children.length === 0) {
+    cardsPool.innerHTML = '<p class="empty-hint">모든 카드가 배치되었습니다.</p>';
+  }
+
+  updateStats();
+}
+
+function createCardEl(num, idx) {
+  const el = document.createElement('div');
+  el.className = `num-card card-n${num}`;
+  el.textContent = num;
+  el.dataset.idx = idx;
+  el.dataset.num = num;
+  attachDragTouch(el);
+  return el;
+}
+
+// ────────────────────────────────────────
+// Dice roll
+// ────────────────────────────────────────
+document.getElementById('btn-dice').addEventListener('click', rollDice);
+
+function rollDice() {
+  if (gameOver) return;
+  const btn = document.getElementById('btn-dice');
+  btn.disabled = true;
+
+  let ticks = 0;
+  const maxTicks = 14;
+  const iv = setInterval(() => {
+    const tmp = Math.floor(Math.random() * 6) + 1;
+    showDiceDots(tmp);
+    ticks++;
+    if (ticks >= maxTicks) {
+      clearInterval(iv);
+      const rolled = Math.floor(Math.random() * 6) + 1;
+      showDiceDots(rolled);
+      diceFace.classList.add('rolling');
+      diceFace.addEventListener('animationend', () => diceFace.classList.remove('rolling'), { once: true });
+      if (rolled === 1) {
+        showDiceDots(1);
+        diceResult.textContent = '1';
+        diceResultLabel.textContent = '군집 수가 1 — 다시 굴려주세요!';
+        setTimeout(() => {
+          alert('🎲 주사위가 1이 나왔습니다!\n군집이 1개이면 의미 없으므로 주사위를 다시 굴려주세요.');
+          btn.disabled = false;
+        }, 100);
+      } else {
+        finalizeDice(rolled);
+        btn.disabled = false;
+      }
+    }
+  }, 60);
+}
+
+function showDiceDots(n) {
+  const pattern = DICE_PATTERNS[n];
+  for (let i = 1; i <= 9; i++) {
+    document.getElementById('d' + i).classList.toggle('on', !!pattern[i - 1]);
+  }
+}
+
+function finalizeDice(rolled) {
+  k = rolled;
+  diceResult.textContent = rolled;
+  diceResultLabel.textContent = `군집 수 K = ${rolled} 로 결정되었습니다`;
+  statK.textContent = rolled;
+
+  if (!gameStarted) {
+    generateCards();
+    renderCardPool(true);
+    gameStarted = true;
+  }
+
+  // Generate initial centers: k evenly spaced from 1..9
+  centers = generateInitialCenters(k);
+  round = 0;
+  history = [];
+  clusterAssignments = {};
+  convergenceBanner.classList.remove('visible');
+  gameOver = false;
+
+  document.getElementById('panel-clusters').style.display = 'block';
+  setupClusterZones();
+  renderCardPool(true);
+  updateStats();
+  updateHistoryDisplay();
+  updateSelectUI();
+  document.getElementById('btn-dice').disabled = false;
+  statPhase.textContent = '카드 배치 중';
+}
+
+function generateInitialCenters(k) {
+  // Evenly spaced between 1 and 9
+  const result = [];
+  for (let i = 0; i < k; i++) {
+    const v = 1 + (i / (k - 1 || 1)) * 8;
+    result.push(Math.round(v));
+  }
+  return result;
+}
+
+// ────────────────────────────────────────
+// Cluster zones
+// ────────────────────────────────────────
+function setupClusterZones() {
+  clustersGrid.innerHTML = '';
+  centers.forEach((c, ci) => {
+    const zone = document.createElement('div');
+    zone.className = `cluster-zone c${ci + 1}`;
+    zone.dataset.cluster = ci;
+
+    const color = CLUSTER_COLORS[ci % CLUSTER_COLORS.length];
+    const header = document.createElement('div');
+    header.className = 'cluster-header';
+    header.innerHTML = `<span>군집 ${ci + 1}</span><span class="cluster-center-badge" id="center-badge-${ci}">기준: ${Math.round(c)}</span>`;
+    header.style.background = color;
+
+    const cardArea = document.createElement('div');
+    cardArea.className = 'cluster-cards';
+    cardArea.id = `cluster-cards-${ci}`;
+
+    const footer = document.createElement('div');
+    footer.className = 'cluster-footer';
+    footer.id = `cluster-footer-${ci}`;
+    footer.innerHTML = `<span>카드 수: 0</span><span>평균: —</span>`;
+
+    zone.appendChild(header);
+    zone.appendChild(cardArea);
+    zone.appendChild(footer);
+
+    attachDropTouch(zone, ci);
+    attachDropMouse(zone, ci);
+
+    clustersGrid.appendChild(zone);
+  });
+}
+
+function refreshClusterUI() {
+  centers.forEach((c, ci) => {
+    const badge = document.getElementById(`center-badge-${ci}`);
+    if (badge) badge.textContent = `기준: ${Math.round(c)}`;
+
+    // Recompute cards in this cluster
+    const indices = Object.entries(clusterAssignments)
+      .filter(([, v]) => v === ci)
+      .map(([k]) => parseInt(k));
+    const nums = indices.map(i => cards[i]);
+    const avg = nums.length ? (nums.reduce((a, b) => a + b, 0) / nums.length) : null;
+
+    const footer = document.getElementById(`cluster-footer-${ci}`);
+    if (footer) footer.innerHTML = `<span>카드 수: ${nums.length}</span><span>평균: ${avg !== null ? Math.round(avg) : '—'}</span>`;
+  });
+  updateStats();
+}
+
+function updateStats() {
+  const placed = Object.keys(clusterAssignments).length;
+  statRound.textContent = round;
+  statPlaced.textContent = `${placed} / 30`;
+  statK.textContent = k || '—';
+
+  const nextBtn = document.getElementById('btn-next-round');
+  if (nextBtn) nextBtn.disabled = placed < 30;
+}
+
+// ────────────────────────────────────────
+// Multi-select & Drag & Drop
+// ────────────────────────────────────────
+let selectedIndices = new Set(); // card indices currently selected
+let draggingIndices = [];        // indices being dragged (selected group)
+let isDragging = false;
+const ghost = document.getElementById('drag-ghost');
+
+function attachDragTouch(el) {
+  el.addEventListener('mousedown', onCardMouseDown);
+  el.addEventListener('touchstart', onCardTouchStart, { passive: false });
+}
+
+// ── Click to select/deselect ──
+function toggleSelect(el) {
+  const idx = parseInt(el.dataset.idx);
+  // only selectable from pool (not placed in cluster)
+  if (el.closest('.cluster-cards')) return;
+  if (selectedIndices.has(idx)) {
+    selectedIndices.delete(idx);
+    el.classList.remove('selected');
+  } else {
+    selectedIndices.add(idx);
+    el.classList.add('selected');
+  }
+  updateSelectUI();
+}
+
+function updateSelectUI() {
+  const btnSA = document.getElementById('btn-select-all');
+  const btnDS = document.getElementById('btn-deselect');
+  const hint = document.getElementById('select-hint');
+  const poolCards = cardsPool.querySelectorAll('.num-card');
+  if (btnSA) btnSA.style.display = poolCards.length > 0 ? 'inline-flex' : 'none';
+  if (btnDS) btnDS.style.display = selectedIndices.size > 0 ? 'inline-flex' : 'none';
+  if (hint) {
+    hint.textContent = selectedIndices.size > 0
+      ? `${selectedIndices.size}장 선택됨 — 드래그해서 군집으로 이동하세요.`
+      : '카드를 클릭해 선택하고, 선택한 카드를 드래그해 군집으로 이동하세요.';
+  }
+}
+
+function clearSelection() {
+  selectedIndices.clear();
+  document.querySelectorAll('.num-card.selected').forEach(el => el.classList.remove('selected'));
+  updateSelectUI();
+}
+
+// ── Mouse events ──
+let dragStartX = 0, dragStartY = 0, dragMoved = false;
+
+function onCardMouseDown(e) {
+  if (e.button !== 0) return;
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+  dragMoved = false;
+
+  const el = e.currentTarget;
+  const idx = parseInt(el.dataset.idx);
+
+  // Determine drag group: if card is selected, drag all selected; else drag just this one
+  if (selectedIndices.has(idx)) {
+    draggingIndices = [...selectedIndices];
+  } else {
+    draggingIndices = [idx];
+  }
+
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+  e.preventDefault();
+}
+
+function onMouseMove(e) {
+  if (!dragMoved) {
+    const dx = Math.abs(e.clientX - dragStartX);
+    const dy = Math.abs(e.clientY - dragStartY);
+    if (dx < 4 && dy < 4) return;
+    dragMoved = true;
+    isDragging = true;
+    buildGhost();
+    markDragging(true);
+  }
+  if (isDragging) {
+    moveGhost(e.clientX, e.clientY);
+    highlightDropTarget(e.clientX, e.clientY);
+  }
+}
+
+function onMouseUp(e) {
+  document.removeEventListener('mousemove', onMouseMove);
+  document.removeEventListener('mouseup', onMouseUp);
+
+  if (!dragMoved) {
+    // It was a click — toggle selection on the first card
+    if (draggingIndices.length === 1) {
+      const el = cardsPool.querySelector(`[data-idx="${draggingIndices[0]}"]`);
+      if (el) toggleSelect(el);
+    }
+    draggingIndices = [];
+    isDragging = false;
+    return;
+  }
+
+  dropCards(e.clientX, e.clientY);
+}
+
+// ── Touch events ──
+let touchDragStarted = false;
+let touchDragEl = null;
+
+function onCardTouchStart(e) {
+  const el = e.currentTarget;
+  const idx = parseInt(el.dataset.idx);
+  touchDragEl = el;
+  touchDragStarted = false;
+  dragStartX = e.touches[0].clientX;
+  dragStartY = e.touches[0].clientY;
+  dragMoved = false;
+
+  if (selectedIndices.has(idx)) {
+    draggingIndices = [...selectedIndices];
+  } else {
+    draggingIndices = [idx];
+  }
+  e.preventDefault();
+}
+
+document.addEventListener('touchmove', (e) => {
+  if (!draggingIndices.length) return;
+  const t = e.touches[0];
+  if (!dragMoved) {
+    const dx = Math.abs(t.clientX - dragStartX);
+    const dy = Math.abs(t.clientY - dragStartY);
+    if (dx < 6 && dy < 6) return;
+    dragMoved = true;
+    isDragging = true;
+    buildGhost();
+    markDragging(true);
+  }
+  if (isDragging) {
+    moveGhost(t.clientX, t.clientY);
+    highlightDropTarget(t.clientX, t.clientY);
+  }
+  e.preventDefault();
+}, { passive: false });
+
+document.addEventListener('touchend', (e) => {
+  if (!draggingIndices.length) return;
+  if (!dragMoved) {
+    // tap = toggle select
+    if (draggingIndices.length === 1) {
+      const el = cardsPool.querySelector(`[data-idx="${draggingIndices[0]}"]`);
+      if (el) toggleSelect(el);
+    }
+    draggingIndices = [];
+    isDragging = false;
+    return;
+  }
+  const t = e.changedTouches[0];
+  dropCards(t.clientX, t.clientY);
+});
+
+// ── Ghost ──
+function buildGhost() {
+  ghost.innerHTML = '';
+  const count = draggingIndices.length;
+  if (count > 1) {
+    // Stack visual
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:relative;width:54px;height:66px;';
+    draggingIndices.slice(0, Math.min(3, count)).forEach((idx, i) => {
+      const num = cards[idx];
+      const c = document.createElement('div');
+      c.style.cssText = `position:absolute;top:${i*4}px;left:${i*4}px;width:44px;height:56px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;border-radius:6px;border:2px solid var(--c-accent);background:var(--c-card-bg);color:var(--c-accent);`;
+      c.textContent = num;
+      wrap.appendChild(c);
+    });
+    // Badge count
+    const badge = document.createElement('div');
+    badge.style.cssText = 'position:absolute;top:-6px;right:-6px;background:var(--c-accent);color:#fff;border-radius:50%;width:20px;height:20px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;';
+    badge.textContent = count;
+    wrap.appendChild(badge);
+    ghost.appendChild(wrap);
+  } else {
+    const idx = draggingIndices[0];
+    const num = cards[idx];
+    const c = document.createElement('div');
+    c.style.cssText = `width:44px;height:56px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;border-radius:6px;border:2px solid var(--c-accent);background:var(--c-card-bg);color:var(--c-accent);`;
+    c.textContent = num;
+    ghost.appendChild(c);
+  }
+  ghost.style.display = 'block';
+}
+
+function markDragging(on) {
+  draggingIndices.forEach(idx => {
+    const el = cardsPool.querySelector(`[data-idx="${idx}"]`);
+    if (el) el.classList.toggle('dragging', on);
+  });
+}
+
+function moveGhost(x, y) {
+  ghost.style.left = x + 'px';
+  ghost.style.top = y + 'px';
+}
+
+let lastHighlighted = null;
+
+function highlightDropTarget(x, y) {
+  if (lastHighlighted) { lastHighlighted.classList.remove('drag-over'); lastHighlighted = null; }
+  ghost.style.display = 'none';
+  const el = document.elementFromPoint(x, y);
+  ghost.style.display = 'block';
+  if (!el) return;
+  const zone = el.closest('.cluster-zone');
+  if (zone) { zone.classList.add('drag-over'); lastHighlighted = zone; return; }
+  const pool = el.closest('#cards-pool');
+  if (pool) { pool.classList.add('drag-over'); lastHighlighted = pool; }
+}
+
+function dropCards(x, y) {
+  ghost.style.display = 'none';
+  markDragging(false);
+  if (lastHighlighted) { lastHighlighted.classList.remove('drag-over'); lastHighlighted = null; }
+
+  ghost.style.display = 'none';
+  const el = document.elementFromPoint(x, y);
+  ghost.style.display = 'none';
+
+  if (el) {
+    const zone = el.closest('.cluster-zone');
+    const pool = el.closest('#cards-pool');
+    if (zone) {
+      const ci = parseInt(zone.dataset.cluster);
+      draggingIndices.forEach(idx => placeCardInCluster(idx, ci));
+      clearSelection();
+    } else if (pool) {
+      draggingIndices.forEach(idx => returnCardToPool(idx));
+      clearSelection();
+    }
+  }
+
+  draggingIndices = [];
+  isDragging = false;
+}
+
+function attachDropMouse(zone, ci) {}
+function attachDropTouch(zone, ci) {}
+
+// ────────────────────────────────────────
+// Card placement logic
+// ────────────────────────────────────────
+function placeCardInCluster(cardIdx, clusterIdx) {
+  const prevCluster = clusterAssignments[cardIdx];
+  if (prevCluster !== undefined && prevCluster !== clusterIdx) {
+    // Remove from previous cluster UI
+    const prevArea = document.getElementById(`cluster-cards-${prevCluster}`);
+    if (prevArea) {
+      const existing = prevArea.querySelector(`[data-idx="${cardIdx}"]`);
+      if (existing) existing.remove();
+    }
+  }
+  clusterAssignments[cardIdx] = clusterIdx;
+
+  const area = document.getElementById(`cluster-cards-${clusterIdx}`);
+  if (area && !area.querySelector(`[data-idx="${cardIdx}"]`)) {
+    const card = createCardEl(cards[cardIdx], cardIdx);
+    card.classList.add('placed');
+    area.appendChild(card);
+  }
+
+  // Remove from pool
+  const poolCard = cardsPool.querySelector(`[data-idx="${cardIdx}"]`);
+  if (poolCard) poolCard.remove();
+  if (cardsPool.children.length === 0) {
+    cardsPool.innerHTML = '<p class="empty-hint">모든 카드가 배치되었습니다.</p>';
+  }
+
+  refreshClusterUI();
+}
+
+function returnCardToPool(cardIdx) {
+  const prevCluster = clusterAssignments[cardIdx];
+  if (prevCluster !== undefined) {
+    const prevArea = document.getElementById(`cluster-cards-${prevCluster}`);
+    if (prevArea) {
+      const existing = prevArea.querySelector(`[data-idx="${cardIdx}"]`);
+      if (existing) existing.remove();
+    }
+    delete clusterAssignments[cardIdx];
+  }
+
+  // Add back to pool if not already there
+  if (!cardsPool.querySelector(`[data-idx="${cardIdx}"]`)) {
+    const emptyHint = cardsPool.querySelector('.empty-hint');
+    if (emptyHint) emptyHint.remove();
+    const card = createCardEl(cards[cardIdx], cardIdx);
+    // Insert in correct sorted position
+    const siblings = Array.from(cardsPool.querySelectorAll('.num-card'));
+    const insertBefore = siblings.find(s => parseInt(s.dataset.idx) > cardIdx);
+    if (insertBefore) cardsPool.insertBefore(card, insertBefore);
+    else cardsPool.appendChild(card);
+  }
+
+  refreshClusterUI();
+}
+
+// ────────────────────────────────────────
+// Next round
+// ────────────────────────────────────────
+document.getElementById('btn-next-round').addEventListener('click', nextRound);
+document.getElementById('btn-auto-hint').addEventListener('click', autoAssign);
+
+function nextRound() {
+  if (Object.keys(clusterAssignments).length < 30) return;
+
+  round++;
+
+  // Compute new centers (means of assigned cards)
+  const newCenters = centers.map((c, ci) => {
+    const indices = Object.entries(clusterAssignments)
+      .filter(([, v]) => v === ci)
+      .map(([k]) => parseInt(k));
+    if (indices.length === 0) return c;
+    const mean = indices.reduce((s, i) => s + cards[i], 0) / indices.length;
+    return Math.round(mean);
+  });
+
+  // Record history
+  history.push({
+    round,
+    k,
+    centers: [...centers],
+    placements: { ...clusterAssignments },
+    newCenters: [...newCenters],
+  });
+  updateHistoryDisplay();
+
+  // Check convergence
+  const converged = centers.every((c, i) => Math.abs(c - newCenters[i]) < 0.005);
+
+  centers = newCenters;
+  setupClusterZones();
+  clusterAssignments = {};
+  renderCardPool(false);
+  renderCardPool(true);
+  refreshClusterUI();
+  updateStats();
+
+  if (converged) {
+    endGame();
+  } else {
+    statPhase.textContent = `${round + 1}회차 배치 중`;
+  }
+}
+
+function endGame() {
+  gameOver = true;
+  statPhase.textContent = '완료!';
+  convergenceBanner.classList.add('visible');
+  document.getElementById('modal-rounds').textContent = `${round}회차`;
+  document.getElementById('modal-gameover').style.display = 'flex';
+  document.getElementById('btn-next-round').disabled = true;
+  document.getElementById('btn-dice').disabled = true;
+}
+
+// ────────────────────────────────────────
+// Auto-assign hint
+// ────────────────────────────────────────
+function autoAssign() {
+  cards.forEach((num, idx) => {
+    let bestCluster = 0;
+    let bestDist = Infinity;
+    centers.forEach((c, ci) => {
+      const d = Math.abs(num - c);
+      if (d < bestDist) { bestDist = d; bestCluster = ci; }
+    });
+    placeCardInCluster(idx, bestCluster);
+  });
+  renderCardPool(false);
+  if (cardsPool.children.length === 0) {
+    cardsPool.innerHTML = '<p class="empty-hint">모든 카드가 배치되었습니다.</p>';
+  }
+  updateStats();
+}
+
+// ────────────────────────────────────────
+// History display
+// ────────────────────────────────────────
+function updateHistoryDisplay() {
+  if (history.length === 0) {
+    historyBody.innerHTML = '<tr><td colspan="5" class="empty-hint">아직 기록이 없습니다.</td></tr>';
+    return;
+  }
+
+  historyBody.innerHTML = history.map(h => {
+    const centersHtml = h.centers.map((c, i) =>
+      `<span class="center-chip" style="background:${CLUSTER_COLORS[i % CLUSTER_COLORS.length]}">${Math.round(c)}</span>`
+    ).join('');
+    const newCentersHtml = h.newCenters.map((c, i) =>
+      `<span class="center-chip" style="background:${CLUSTER_COLORS[i % CLUSTER_COLORS.length]}">${Math.round(c)}</span>`
+    ).join('');
+    const changed = h.centers.some((c, i) => Math.abs(c - h.newCenters[i]) >= 0.005);
+    const changeLabel = changed
+      ? '<span style="color:#e85d3b;font-weight:700">변경</span>'
+      : '<span style="color:#2e9e6e;font-weight:700">수렴 ✓</span>';
+    return `<tr>
+      <td style="font-weight:700">${h.round}</td>
+      <td>${h.k}</td>
+      <td><div class="centers-list">${centersHtml}</div></td>
+      <td><div class="centers-list">${newCentersHtml}</div></td>
+      <td>${changeLabel}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ────────────────────────────────────────
+// Buttons
+// ────────────────────────────────────────
+document.getElementById('btn-show-history').addEventListener('click', () => {
+  const panel = document.getElementById('panel-history');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+});
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  if (confirm('처음부터 다시 시작하시겠습니까?')) resetGame();
+});
+
+document.getElementById('modal-restart').addEventListener('click', () => {
+  document.getElementById('modal-gameover').style.display = 'none';
+  resetGame();
+});
+
+document.getElementById('modal-view-history').addEventListener('click', () => {
+  document.getElementById('modal-gameover').style.display = 'none';
+  document.getElementById('panel-history').style.display = 'block';
+  document.getElementById('panel-history').scrollIntoView({ behavior: 'smooth' });
+});
+
+function resetGame() {
+  cards = [];
+  centers = [];
+  k = 0;
+  round = 0;
+  history = [];
+  clusterAssignments = {};
+  gameStarted = false;
+  gameOver = false;
+  selectedIndices.clear();
+  draggingIndices = [];
+  isDragging = false;
+
+  cardsPool.innerHTML = '<p class="empty-hint">먼저 주사위를 굴려 군집을 만드세요.</p>';
+  clustersGrid.innerHTML = '';
+  diceResult.textContent = '?';
+  diceResultLabel.textContent = '버튼을 눌러 주사위를 굴리세요';
+  showDiceDots(1);
+  document.querySelectorAll('.dot').forEach(d => d.classList.remove('on'));
+
+  document.getElementById('panel-clusters').style.display = 'none';
+  document.getElementById('panel-history').style.display = 'none';
+  convergenceBanner.classList.remove('visible');
+  document.getElementById('btn-dice').disabled = false;
+  document.getElementById('modal-gameover').style.display = 'none';
+
+  statRound.textContent = '0';
+  statK.textContent = '—';
+  statPlaced.textContent = '0 / 30';
+  statPhase.textContent = '시작 전';
+
+  historyBody.innerHTML = '<tr><td colspan="5" class="empty-hint">아직 기록이 없습니다.</td></tr>';
+}
+
+// ────────────────────────────────────────
+// Init
+// ────────────────────────────────────────
+resetGame();
+
+// Select buttons (registered after DOM is ready)
+document.getElementById('btn-select-all').addEventListener('click', () => {
+  cardsPool.querySelectorAll('.num-card').forEach(el => {
+    const idx = parseInt(el.dataset.idx);
+    selectedIndices.add(idx);
+    el.classList.add('selected');
+  });
+  updateSelectUI();
+});
+document.getElementById('btn-deselect').addEventListener('click', clearSelection);
+// ────────────────────────────────────────
+// Visitor Counter
+// ────────────────────────────────────────
+(function () {
+  // ★ STEP 1-3에서 복사한 웹앱 URL로 교체하세요 ★
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbwLktQ89x5ttYAu6i21ym8VpiNa67utoPsjgs8lE8oGsLfzJ90LuISr-N4iEnOA_dIW/exec';
+
+  fetch(GAS_URL)
+    .then(res => res.json())
+    .then(data => {
+      document.getElementById('visitor-today').textContent = data.today.toLocaleString();
+      document.getElementById('visitor-total').textContent = data.total.toLocaleString();
+    })
+    .catch(() => {
+      document.getElementById('visitor-today').textContent = '?';
+      document.getElementById('visitor-total').textContent = '?';
+    });
+})();
+</script>
+<footer>
+  Copyright &copy; 2026 KankanClass. All rights reserved.
+</footer>
+</body>
+</html>
